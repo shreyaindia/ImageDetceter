@@ -1,0 +1,644 @@
+deepfake-protection-app v8
+CodePreview
+import { useState, useRef } from 'react';
+import { Button } from "/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "/components/ui/card";
+import { Input } from "/components/ui/input";
+import { Label } from "/components/ui/label";
+import { Textarea } from "/components/ui/textarea";
+import { Shield, Upload, Download, AlertTriangle, Loader2, Check, X } from "lucide-react";
+
+type TabType = 'detection' | 'watermark' | 'report';
+type DetectionResult = {
+  isDeepfake: boolean;
+  confidence: number;
+  details?: string;
+};
+
+type ReportData = {
+  email: string;
+  description: string;
+  image: string | null;
+};
+
+export default function DeepfakeProtectionApp() {
+  // Active tab state
+  const [activeTab, setActiveTab] = useState<TabType>('detection');
+  
+  // Deepfake detection state
+  const [detectionImage, setDetectionImage] = useState<string | null>(null);
+  const [detectionResult, setDetectionResult] = useState<DetectionResult | null>(null);
+  const [isDetecting, setIsDetecting] = useState(false);
+  const detectionFileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Watermark state
+  const [originalImage, setOriginalImage] = useState<string | null>(null);
+  const [watermarkedImage, setWatermarkedImage] = useState<string | null>(null);
+  const [watermarkText, setWatermarkText] = useState('© ShieldAI');
+  const [isWatermarking, setIsWatermarking] = useState(false);
+  const watermarkFileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Report state
+  const [reportData, setReportData] = useState<ReportData>({
+    email: '',
+    description: '',
+    image: null
+  });
+  const [isReportSubmitted, setIsReportSubmitted] = useState(false);
+  const [isSubmittingReport, setIsSubmittingReport] = useState(false);
+  const reportFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Canvas ref for watermark operations
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  // Handle image upload for any section
+  const handleImageUpload = (
+    e: React.ChangeEvent<HTMLInputElement>, 
+    setImage: (val: string | null) => void,
+    clearResults?: () => void
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      alert('Please upload an image file (JPEG, PNG)');
+      return;
+    }
+
+    // Validate file size (5MB max)
+    if (file.size > 5 * 1024 * 1024) {
+      alert('File size should be less than 5MB');
+      return;
+    }
+
+    if (clearResults) clearResults();
+    
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setImage(event.target?.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Mock deepfake detection
+  const detectDeepfake = async () => {
+    if (!detectionImage) return;
+    
+    setIsDetecting(true);
+    setDetectionResult(null);
+    
+    // Simulate API call delay
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    
+    // More realistic mock results
+    const isDeepfake = Math.random() > 0.7; // 30% chance of being a deepfake
+    const confidence = Math.floor(Math.random() * 30) + 70; // 70-99% confidence
+    const details = isDeepfake 
+      ? [
+          'Potential face warping detected',
+          'Inconsistent lighting patterns',
+          'Unnatural skin texture'
+        ].join(' • ')
+      : 'No significant manipulation indicators found';
+    
+    setDetectionResult({ 
+      isDeepfake, 
+      confidence,
+      details
+    });
+    setIsDetecting(false);
+  };
+
+  // Add watermark to image
+  const addWatermark = async () => {
+    if (!originalImage || !watermarkText) return;
+    
+    try {
+      setIsWatermarking(true);
+      
+      // Create canvas
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      // Load original image
+      const img = new Image();
+      img.src = originalImage;
+      
+      await new Promise((resolve) => {
+        img.onload = resolve;
+      });
+
+      // Set canvas dimensions
+      canvas.width = img.width;
+      canvas.height = img.height;
+      
+      // Draw original image
+      ctx.drawImage(img, 0, 0);
+      
+      // Add watermark text
+      ctx.font = `bold ${Math.max(img.width / 10, 30)}px Arial`;
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      
+      // Calculate text position (center of image)
+      const x = img.width / 2;
+      const y = img.height / 2;
+      
+      // Add text shadow for better visibility
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+      ctx.shadowBlur = 10;
+      ctx.shadowOffsetX = 2;
+      ctx.shadowOffsetY = 2;
+      
+      ctx.fillText(watermarkText, x, y);
+      
+      // Convert canvas to data URL for preview
+      setWatermarkedImage(canvas.toDataURL('image/png'));
+      
+    } catch (error) {
+      console.error('Error adding watermark:', error);
+      alert('Failed to add watermark. Please try again.');
+    } finally {
+      setIsWatermarking(false);
+    }
+  };
+
+  // Download watermarked image
+  const downloadWatermarkedImage = () => {
+    if (!watermarkedImage) return;
+    
+    try {
+      const link = document.createElement('a');
+      link.download = `watermarked-${Date.now()}.png`;
+      link.href = watermarkedImage;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (error) {
+      console.error('Error downloading image:', error);
+      alert('Failed to download image. Please try again.');
+    }
+  };
+
+  // Handle report submission
+  const handleReportSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!reportData.image) {
+      alert('Please upload an image to report');
+      return;
+    }
+    
+    setIsSubmittingReport(true);
+    
+    // Simulate API call
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    console.log('Report submitted:', reportData);
+    setIsReportSubmitted(true);
+    setIsSubmittingReport(false);
+  };
+
+  // Reset detection section
+  const resetDetection = () => {
+    setDetectionImage(null);
+    setDetectionResult(null);
+    if (detectionFileInputRef.current) {
+      detectionFileInputRef.current.value = '';
+    }
+  };
+
+  // Tab navigation component
+  const TabButton = ({ tab, icon: Icon, children }: { tab: TabType, icon: React.ComponentType<{ className?: string }>, children: React.ReactNode }) => (
+    <Button 
+      variant={activeTab === tab ? 'default' : 'outline'} 
+      onClick={() => {
+        setActiveTab(tab);
+        setDetectionResult(null);
+      }}
+      className="flex items-center gap-2"
+    >
+      <Icon className="h-4 w-4" />
+      {children}
+    </Button>
+  );
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 py-8 px-4">
+      <div className="max-w-4xl mx-auto">
+        <Card className="mb-8 shadow-lg">
+          <CardHeader className="border-b">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+              <div>
+                <CardTitle className="text-2xl font-bold flex items-center gap-2">
+                  <Shield className="text-blue-600" />
+                  ShieldAI Protection Suite
+                </CardTitle>
+                <CardDescription>
+                  {activeTab === 'detection' && 'Detect manipulated media with AI analysis'}
+                  {activeTab === 'watermark' && 'Protect your content with digital watermarks'}
+                  {activeTab === 'report' && 'Report suspicious deepfake content'}
+                </CardDescription>
+              </div>
+              <div className="flex gap-2 overflow-x-auto pb-2 md:pb-0">
+                <TabButton tab="detection" icon={Shield}>Detection</TabButton>
+                <TabButton tab="watermark" icon={Upload}>Watermark</TabButton>
+                <TabButton tab="report" icon={AlertTriangle}>Report</TabButton>
+              </div>
+            </div>
+          </CardHeader>
+          
+          <CardContent className="pt-6">
+            {/* Deepfake Detection Tab */}
+            {activeTab === 'detection' && (
+              <div className="space-y-6">
+                <div>
+                  <Label htmlFor="detection-upload" className="block mb-2 font-medium">
+                    Upload Image for Analysis
+                  </Label>
+                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                    {!detectionImage ? (
+                      <>
+                        <Upload className="mx-auto h-10 w-10 text-gray-400 mb-3" />
+                        <p className="font-medium">Drag & drop an image or click to browse</p>
+                        <p className="text-sm text-gray-500 mt-1">Supports JPG, PNG up to 5MB</p>
+                        <Input 
+                          id="detection-upload" 
+                          type="file" 
+                          accept="image/*" 
+                          ref={detectionFileInputRef}
+                          onChange={(e) => handleImageUpload(e, setDetectionImage, () => setDetectionResult(null))}
+                          className="hidden"
+                        />
+                        <Button 
+                          variant="outline" 
+                          onClick={() => detectionFileInputRef.current?.click()}
+                          className="mt-4"
+                        >
+                          Select Image
+                        </Button>
+                      </>
+                    ) : (
+                      <div className="space-y-4">
+                        <div className="relative mx-auto max-w-md">
+                          <img 
+                            src={detectionImage} 
+                            alt="Uploaded for detection" 
+                            className="rounded-lg border shadow-sm max-h-64 w-full object-contain"
+                          />
+                        </div>
+                        <div className="flex gap-2 justify-center">
+                          <Button 
+                            variant="outline" 
+                            onClick={() => detectionFileInputRef.current?.click()}
+                          >
+                            Change Image
+                          </Button>
+                          <Button 
+                            variant="outline" 
+                            onClick={resetDetection}
+                          >
+                            Clear
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {detectionImage && (
+                  <div className="space-y-4">
+                    <Button 
+                      onClick={detectDeepfake}
+                      disabled={isDetecting}
+                      className="w-full"
+                    >
+                      {isDetecting ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Analyzing...
+                        </>
+                      ) : (
+                        <>
+                          <Shield className="mr-2 h-4 w-4" />
+                          Analyze for Deepfake
+                        </>
+                      )}
+                    </Button>
+
+                    {detectionResult && (
+                      <Card className={detectionResult.isDeepfake ? 
+                        "border-red-200 bg-red-50" : 
+                        "border-green-200 bg-green-50"}>
+                        <CardHeader className="pb-3">
+                          <div className="flex items-center gap-2">
+                            {detectionResult.isDeepfake ? (
+                              <X className="h-5 w-5 text-red-600" />
+                            ) : (
+                              <Check className="h-5 w-5 text-green-600" />
+                            )}
+                            <CardTitle className={detectionResult.isDeepfake ? 
+                              "text-red-600" : 
+                              "text-green-600"}>
+                              {detectionResult.isDeepfake ? 
+                                "Potential Deepfake Detected" : 
+                                "Authentic Content"}
+                            </CardTitle>
+                          </div>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="space-y-2">
+                            <div className="flex justify-between">
+                              <span className="text-sm font-medium">Confidence:</span>
+                              <span className="font-mono font-medium">
+                                {detectionResult.confidence}%
+                              </span>
+                            </div>
+                            {detectionResult.details && (
+                              <div className="text-sm pt-2 border-t">
+                                <p className="font-medium mb-1">Analysis Details:</p>
+                                <p>{detectionResult.details}</p>
+                              </div>
+                            )}
+                          </div>
+                        </CardContent>
+                        <CardFooter>
+                          <Button 
+                            variant={detectionResult.isDeepfake ? "destructive" : "outline"}
+                            size="sm"
+                            onClick={() => setActiveTab('report')}
+                          >
+                            {detectionResult.isDeepfake ? "Report This Content" : "False Positive?"}
+                          </Button>
+                        </CardFooter>
+                      </Card>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Watermark Protection Tab */}
+            {activeTab === 'watermark' && (
+              <div className="space-y-6">
+                <div>
+                  <Label htmlFor="watermark-upload" className="block mb-2 font-medium">
+                    Upload Image to Protect
+                  </Label>
+                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                    {!originalImage ? (
+                      <>
+                        <Upload className="mx-auto h-10 w-10 text-gray-400 mb-3" />
+                        <p className="font-medium">Select an image to add watermark</p>
+                        <p className="text-sm text-gray-500 mt-1">Supports JPG, PNG up to 5MB</p>
+                        <Input 
+                          id="watermark-upload" 
+                          type="file" 
+                          accept="image/*" 
+                          ref={watermarkFileInputRef}
+                          onChange={(e) => handleImageUpload(e, setOriginalImage, () => setWatermarkedImage(null))}
+                          className="hidden"
+                        />
+                        <Button 
+                          variant="outline" 
+                          onClick={() => watermarkFileInputRef.current?.click()}
+                          className="mt-4"
+                        >
+                          Select Image
+                        </Button>
+                      </>
+                    ) : (
+                      <div className="space-y-4">
+                        <div className="relative mx-auto max-w-md">
+                          <img 
+                            src={originalImage} 
+                            alt="Original upload" 
+                            className="rounded-lg border shadow-sm max-h-64 w-full object-contain"
+                          />
+                        </div>
+                        <div className="flex gap-2 justify-center">
+                          <Button 
+                            variant="outline" 
+                            onClick={() => watermarkFileInputRef.current?.click()}
+                          >
+                            Change Image
+                          </Button>
+                          <Button 
+                            variant="outline" 
+                            onClick={() => {
+                              setOriginalImage(null);
+                              setWatermarkedImage(null);
+                            }}
+                          >
+                            Clear
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {originalImage && (
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="watermark-text" className="block mb-2 font-medium">
+                        Watermark Text
+                      </Label>
+                      <Input
+                        id="watermark-text"
+                        value={watermarkText}
+                        onChange={(e) => setWatermarkText(e.target.value)}
+                        placeholder="Enter your watermark text"
+                      />
+                    </div>
+
+                    <Button 
+                      onClick={addWatermark}
+                      disabled={isWatermarking || !watermarkText}
+                      className="w-full"
+                    >
+                      {isWatermarking ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Adding Watermark...
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="mr-2 h-4 w-4" />
+                          Add Watermark
+                        </>
+                      )}
+                    </Button>
+
+                    {watermarkedImage && (
+                      <div className="space-y-4">
+                        <h3 className="font-medium">Watermarked Version</h3>
+                        <div className="relative mx-auto max-w-md">
+                          <img 
+                            src={watermarkedImage} 
+                            alt="Watermarked version" 
+                            className="rounded-lg border shadow-sm max-h-64 w-full object-contain"
+                          />
+                        </div>
+                        <Button 
+                          onClick={downloadWatermarkedImage}
+                          className="w-full"
+                        >
+                          <Download className="mr-2 h-4 w-4" />
+                          Download Protected Image
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Report Tab */}
+            {activeTab === 'report' && (
+              <div className="space-y-6">
+                {isReportSubmitted ? (
+                  <Card className="border-green-200 bg-green-50">
+                    <CardHeader>
+                      <div className="flex items-center gap-2">
+                        <Check className="h-5 w-5 text-green-600" />
+                        <CardTitle className="text-green-600">Report Submitted</CardTitle>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <p>Thank you for helping combat deepfakes. Our team will review your report and take appropriate action.</p>
+                    </CardContent>
+                    <CardFooter>
+                      <Button 
+                        variant="outline" 
+                        onClick={() => {
+                          setIsReportSubmitted(false);
+                          setReportData({
+                            email: '',
+                            description: '',
+                            image: null
+                          });
+                        }}
+                      >
+                        Submit Another Report
+                      </Button>
+                    </CardFooter>
+                  </Card>
+                ) : (
+                  <form onSubmit={handleReportSubmit} className="space-y-4">
+                    <div>
+                      <Label htmlFor="report-upload" className="block mb-2 font-medium">
+                        Upload Suspicious Image
+                      </Label>
+                      <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                        {!reportData.image ? (
+                          <>
+                            <AlertTriangle className="mx-auto h-10 w-10 text-yellow-500 mb-3" />
+                            <p className="font-medium">Select the image you want to report</p>
+                            <p className="text-sm text-gray-500 mt-1">Supports JPG, PNG up to 5MB</p>
+                            <Input 
+                              id="report-upload" 
+                              type="file" 
+                              accept="image/*" 
+                              ref={reportFileInputRef}
+                              onChange={(e) => handleImageUpload(e, (val) => setReportData({...reportData, image: val}))}
+                              className="hidden"
+                            />
+                            <Button 
+                              variant="outline" 
+                              onClick={() => reportFileInputRef.current?.click()}
+                              className="mt-4"
+                            >
+                              Select Image
+                            </Button>
+                          </>
+                        ) : (
+                          <div className="space-y-4">
+                            <div className="relative mx-auto max-w-md">
+                              <img 
+                                src={reportData.image} 
+                                alt="Reported image" 
+                                className="rounded-lg border shadow-sm max-h-64 w-full object-contain"
+                              />
+                            </div>
+                            <div className="flex gap-2 justify-center">
+                              <Button 
+                                variant="outline" 
+                                onClick={() => reportFileInputRef.current?.click()}
+                              >
+                                Change Image
+                              </Button>
+                              <Button 
+                                variant="outline" 
+                                onClick={() => setReportData({...reportData, image: null})}
+                              >
+                                Remove
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {reportData.image && (
+                      <>
+                        <div>
+                          <Label htmlFor="report-email" className="block mb-2 font-medium">
+                            Your Email Address
+                          </Label>
+                          <Input
+                            id="report-email"
+                            type="email"
+                            value={reportData.email}
+                            onChange={(e) => setReportData({...reportData, email: e.target.value})}
+                            placeholder="example@email.com"
+                            required
+                          />
+                        </div>
+
+                        <div>
+                          <Label htmlFor="report-description" className="block mb-2 font-medium">
+                            Why are you reporting this content?
+                          </Label>
+                          <Textarea
+                            id="report-description"
+                            value={reportData.description}
+                            onChange={(e) => setReportData({...reportData, description: e.target.value})}
+                            placeholder="Please describe why you believe this is a deepfake or manipulated media..."
+                            rows={4}
+                            required
+                          />
+                        </div>
+
+                        <Button 
+                          type="submit" 
+                          disabled={isSubmittingReport}
+                          className="w-full"
+                        >
+                          {isSubmittingReport ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Submitting...
+                            </>
+                          ) : (
+                            <>
+                              <AlertTriangle className="mr-2 h-4 w-4" />
+                              Submit Report
+                            </>
+                          )}
+                        </Button>
+                      </>
+                    )}
+                  </form>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
